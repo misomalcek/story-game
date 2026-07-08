@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Story — nekonečný príbeh · aisvet</title>
+<meta name="description" content="Interaktívny AI text-based príbeh. 3 voľby v každom kroku. Pohon: tvoj vlastný API key (Anthropic alebo LM Studio local). Zadarmo. Lokálne. Nekonečný.">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  :root {
+    --void:#0A0A0F; --carbon:#111118; --graphite:#18182A; --slate:#27273A;
+    --ink-100:#F4F4F5; --ink-200:#E4E4E7; --ink-400:#A1A1AA; --ink-600:#52525B;
+    --ai-violet:#8B5CF6; --ai-cyan:#06B6D4; --ai-pink:#EC4899; --ai-green:#22C55E;
+    --border:#1E1E3A;
+    --glass:rgba(24,24,40,0.5);
+    --red:#EF4444;
+    --font-display:'Geist','SF Pro Display',system-ui,sans-serif;
+    --font-body:'Inter','Segoe UI',system-ui,sans-serif;
+    --font-mono:'Geist Mono','SF Mono','Menlo',monospace;
+    --ease:cubic-bezier(0.22,1,0.36,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-body);
+    background:var(--void);
+    color:var(--ink-100);
+    line-height:1.6;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  /* ─── Neural substrate background ─── */
+  .neural-bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .neural-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(139,92,246,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(139,92,246,.05) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse at 50% 40%,black 30%,transparent 70%);-webkit-mask-image:radial-gradient(ellipse at 50% 40%,black 30%,transparent 70%)}
+  .neural-orb{position:absolute;border-radius:50%;filter:blur(120px);opacity:.18}
+  .orb-1{width:600px;height:600px;top:-200px;left:-150px;background:var(--ai-violet)}
+  .orb-2{width:500px;height:500px;bottom:-200px;right:-100px;background:var(--ai-cyan)}
+  .neural-svg{position:absolute;inset:0;width:100%;height:100%;opacity:.35}
+  .neural-svg path{stroke-dasharray:1000;stroke-dashoffset:1000;animation:dash 26s linear infinite;fill:none;stroke-width:1.2;stroke-linecap:round}
+  .neural-svg path:nth-child(2){animation-duration:32s;animation-direction:reverse}
+  .neural-svg path:nth-child(3){animation-duration:22s}
+  .neural-svg path:nth-child(4){animation-duration:28s;animation-direction:reverse}
+  .neural-svg path:nth-child(5){animation-duration:24s}
+  @keyframes dash{to{stroke-dashoffset:-1000}}
+  .neural-node{position:absolute;width:8px;height:8px;border-radius:50%;animation:pulse 2.5s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)}}
+
+  /* ─── Layout ─── */
+  .shell{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;gap:16px;padding:16px 24px;
+    border-bottom:1px solid var(--border);
+    backdrop-filter:blur(16px) saturate(180%);
+    background:color-mix(in srgb,var(--void) 70%,transparent);
+    position:sticky;top:0;z-index:50;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:16px;letter-spacing:-.01em;text-decoration:none;color:var(--ink-100)}
+  .brand-dots{position:relative;width:24px;height:24px}
+  .brand-dots span{position:absolute;width:12px;height:12px;border-radius:50%;filter:blur(2px);mix-blend-mode:screen;top:6px}
+  .brand-dots span:nth-child(1){background:var(--ai-violet);left:0}
+  .brand-dots span:nth-child(2){background:var(--ai-cyan);left:8px}
+  .topbar h1{flex:1;font-family:var(--font-mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ai-violet)}
+  .topbar h1 .step{color:var(--ink-400);margin-left:6px}
+  .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:var(--glass);border:1px solid var(--border);color:var(--ink-200);cursor:pointer;font-size:16px;transition:all 200ms var(--ease)}
+  .btn-icon:hover{border-color:var(--ai-violet);color:var(--ai-violet)}
+
+  main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:48px 24px 96px;width:100%;max-width:760px;margin:0 auto}
+
+  /* ─── Setup screen ─── */
+  .setup{width:100%;background:var(--carbon);border:1px solid var(--border);border-radius:20px;padding:32px;display:flex;flex-direction:column;gap:20px}
+  .setup h2{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+  .setup h2 span{background:linear-gradient(135deg,var(--ai-violet),var(--ai-cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .setup p{color:var(--ink-400);font-size:14px}
+  .field{display:flex;flex-direction:column;gap:8px}
+  .field label{font-family:var(--font-mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-400)}
+  .field select,.field input{background:var(--graphite);border:1px solid var(--border);color:var(--ink-100);padding:12px 14px;border-radius:10px;font-family:var(--font-body);font-size:14px;width:100%}
+  .field select:focus,.field input:focus{outline:none;border-color:var(--ai-violet);box-shadow:0 0 0 3px color-mix(in srgb,var(--ai-violet) 12%,transparent)}
+  .field .hint{font-family:var(--font-mono);font-size:10px;color:var(--ink-600);line-height:1.6}
+  .field .hint a{color:var(--ai-cyan)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:10px;font-family:var(--font-body);font-weight:600;font-size:14px;cursor:pointer;border:1px solid transparent;transition:all 200ms var(--ease);text-decoration:none}
+  .btn-primary{background:var(--ai-violet);color:white;box-shadow:0 4px 16px color-mix(in srgb,var(--ai-violet) 30%,transparent)}
+  .btn-primary:hover{background:#7c4ce0;transform:translateY(-1px);box-shadow:0 8px 24px color-mix(in srgb,var(--ai-violet) 40%,transparent)}
+  .btn-glass{background:var(--glass);color:var(--ink-100);border-color:var(--border)}
+  .btn-glass:hover{border-color:var(--ai-violet)}
+  .btn-danger{background:transparent;color:var(--red);border-color:var(--red)}
+  .btn-danger:hover{background:color-mix(in srgb,var(--red) 12%,transparent)}
+
+  /* ─── Story turn ─── */
+  .turn{width:100%;background:var(--carbon);border:1px solid var(--border);border-radius:20px;padding:28px;display:flex;flex-direction:column;gap:20px;animation:fadein 350ms var(--ease)}
+  @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .turn-meta{font-family:var(--font-mono);font-size:11px;color:var(--ink-600);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:12px}
+  .turn-meta .badge{padding:3px 9px;border-radius:999px;border:1px solid var(--border);background:var(--glass);color:var(--ai-violet)}
+  .story{font-family:'Georgia','Playfair Display',serif;font-size:18px;line-height:1.7;color:var(--ink-100)}
+  .story p{margin:0 0 10px}
+  .choices{display:flex;flex-direction:column;gap:10px}
+  .choice{
+    text-align:left;background:var(--graphite);color:var(--ink-100);border:1px solid var(--border);
+    border-radius:14px;padding:18px 22px;cursor:pointer;font-family:var(--font-body);font-size:15px;
+    transition:all 220ms var(--ease);display:flex;align-items:flex-start;gap:14px
+  }
+  .choice:hover{border-color:var(--ai-violet);background:color-mix(in srgb,var(--ai-violet) 8%,var(--graphite));transform:translateY(-1px);box-shadow:0 6px 24px color-mix(in srgb,var(--ai-violet) 16%,transparent)}
+  .choice:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+  .choice .letter{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;border-radius:50%;background:var(--ai-violet);color:white;font-family:var(--font-mono);font-size:12px;font-weight:700}
+
+  /* ─── Loading / error ─── */
+  .loading{display:flex;align-items:center;gap:12px;color:var(--ai-cyan);font-family:var(--font-mono);font-size:12px;padding:32px}
+  .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--ai-cyan);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .err{background:color-mix(in srgb,var(--red) 8%,var(--carbon));border:1px solid var(--red);border-radius:14px;padding:20px;color:var(--ink-100);display:flex;flex-direction:column;gap:12px}
+  .err strong{color:var(--red);font-family:var(--font-display)}
+  .err pre{font-family:var(--font-mono);font-size:11px;background:var(--graphite);padding:10px 12px;border-radius:8px;overflow:auto;white-space:pre-wrap;max-height:200px}
+  .err .row{margin-top:4px}
+
+  /* ─── History rail ─── */
+  .history{margin-top:32px;width:100%;display:flex;flex-direction:column;gap:8px}
+  .history-h{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-600);margin-bottom:6px}
+  .history-step{padding:10px 14px;background:var(--glass);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--ink-400);display:flex;gap:10px;align-items:flex-start}
+  .history-step .n{font-family:var(--font-mono);font-size:10px;color:var(--ai-cyan);min-width:24px}
+
+  /* ─── Modal ─── */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(10,10,15,.7);backdrop-filter:blur(8px);z-index:100;display:none;align-items:center;justify-content:center;padding:24px}
+  .modal-backdrop.show{display:flex;animation:fadein 200ms}
+  .modal{background:var(--carbon);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:520px;width:100%;display:flex;flex-direction:column;gap:18px}
+  .modal h3{font-family:var(--font-display);font-size:18px}
+
+  footer{padding:16px 24px;border-top:1px solid var(--border);font-family:var(--font-mono);font-size:10px;color:var(--ink-600);text-align:center}
+  footer a{color:var(--ai-cyan);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="neural-bg" aria-hidden="true">
+  <div class="neural-grid"></div>
+  <div class="neural-orb orb-1"></div>
+  <div class="neural-orb orb-2"></div>
+  <svg class="neural-svg" viewBox="0 0 1000 600" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#8B5CF6"/><stop offset="100%" stop-color="#06B6D4"/></linearGradient>
+    </defs>
+    <path d="M-50 100 Q 250 250, 500 150 T 1050 200" stroke="url(#g1)"/>
+    <path d="M-50 300 Q 200 100, 500 380 T 1050 320" stroke="url(#g1)"/>
+    <path d="M-50 500 Q 300 350, 500 480 T 1050 420" stroke="url(#g1)"/>
+    <path d="M100 -50 Q 250 250, 400 600" stroke="url(#g1)"/>
+    <path d="M700 -50 Q 600 300, 800 600" stroke="url(#g1)"/>
+  </svg>
+  <span class="neural-node" style="top:24%;left:48%;background:var(--ai-violet);box-shadow:0 0 16px var(--ai-violet);animation-delay:0s"></span>
+  <span class="neural-node" style="top:42%;left:20%;background:var(--ai-cyan);box-shadow:0 0 16px var(--ai-cyan);animation-delay:.4s"></span>
+  <span class="neural-node" style="top:62%;left:72%;background:var(--ai-pink);box-shadow:0 0 16px var(--ai-pink);animation-delay:.8s"></span>
+  <span class="neural-node" style="top:30%;left:78%;background:var(--ai-violet);box-shadow:0 0 16px var(--ai-violet);animation-delay:1.2s"></span>
+  <span class="neural-node" style="top:75%;left:30%;background:var(--ai-green);box-shadow:0 0 16px var(--ai-green);animation-delay:1.6s"></span>
+  <span class="neural-node" style="top:18%;left:14%;background:var(--ai-cyan);box-shadow:0 0 16px var(--ai-cyan);animation-delay:2s"></span>
+</div>
+
+<div class="shell">
+<header class="topbar">
+  <a class="brand" href="/">
+    <span class="brand-dots"><span></span><span></span></span>
+    aisvet · hra
+  </a>
+  <h1 id="bar-h">◆ NEKONEČNÝ PRÍBEH <span class="step" id="bar-step"></span></h1>
+  <button class="btn-icon" id="btn-history" title="História">≡</button>
+  <button class="btn-icon" id="btn-reset" title="Reset (Ctrl+R)">↻</button>
+  <button class="btn-icon" id="btn-settings" title="Nastavenia">⚙</button>
+</header>
+
+<main id="stage">
+  <!-- populated by JS -->
+</main>
+
+<footer>
+  aisvet · hra — tvoj API key, tvoj príbeh. Žiadne servery. ·
+  <a href="/">späť na aisvet ↗</a>
+</footer>
+</div>
+
+<div class="modal-backdrop" id="settings-modal">
+  <div class="modal">
+    <h3>Nastavenia</h3>
+    <div class="field">
+      <label for="prov">Provider</label>
+      <select id="prov">
+        <option value="anthropic">Anthropic (Sonnet 4.5) — odporúčané</option>
+        <option value="lmstudio">LM Studio local (Gemma4 / iné)</option>
+      </select>
+      <span class="hint">Volá sa priamo z prehliadača. Tvoj kľúč nikdy neopúšťa tvoje zariadenie (uložený v <code>localStorage</code>).</span>
+    </div>
+    <div class="field" id="anthropic-fields">
+      <label for="ant-key">Anthropic API key</label>
+      <input type="password" id="ant-key" placeholder="sk-ant-api03-..." autocomplete="off">
+      <span class="hint">Získaj na <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Krátka hra (~10 ťahov) ≈ $0.03.</span>
+    </div>
+    <div class="field" id="lmstudio-fields" style="display:none">
+      <label for="lm-url">LM Studio endpoint</label>
+      <input type="text" id="lm-url" placeholder="http://localhost:1234/v1/chat/completions" value="http://localhost:1234/v1/chat/completions">
+      <label for="lm-model" style="margin-top:8px">Model</label>
+      <input type="text" id="lm-model" placeholder="gemma-4-e4b-it-mlx" value="gemma-4-e4b-it-mlx">
+      <label for="lm-key" style="margin-top:8px">Bearer token (ak vyžaduje)</label>
+      <input type="password" id="lm-key" placeholder="sk-lm-..." autocomplete="off">
+      <span class="hint">LM Studio od v0.3.10 vyžaduje API token. Nájdi v LM Studio → Developer → API Key.</span>
+    </div>
+    <div class="field">
+      <label for="lang">Jazyk príbehu</label>
+      <select id="lang">
+        <option value="sk">Slovenský</option>
+        <option value="en">English</option>
+        <option value="cs">Český</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn btn-primary" id="save-settings">Uložiť a hrať</button>
+      <button class="btn btn-glass" id="close-settings">Zrušiť</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// AI STORY — public demo
+// • Anthropic native /v1/messages with anthropic-dangerous-direct-browser-access
+// • LM Studio local OpenAI-compat fallback
+// • API keys stored in localStorage (never leaves browser)
+// • Stateful conversation (full history each turn)
+// • Strict JSON schema enforcement + repair fallback
+// • Rich error UI
+// • No innerHTML with untrusted content (DOM API only)
+// ============================================================================
+'use strict';
+
+const LS = {
+  prov: 'aisvet_hra_provider',
+  ant: 'aisvet_hra_ant_key',
+  lmUrl: 'aisvet_hra_lm_url',
+  lmModel: 'aisvet_hra_lm_model',
+  lmKey: 'aisvet_hra_lm_key',
+  lang: 'aisvet_hra_lang',
+  history: 'aisvet_hra_history',
+};
+
+const LANG_NAMES = {sk:'slovensky', en:'in English', cs:'česky'};
+
+function systemPrompt(lang) {
+  const langStr = LANG_NAMES[lang] || 'slovensky';
+  return `Si rozprávač interaktívneho text-based príbehu (${langStr}).
+KAŽDÝ tvoj output je IBA validný JSON v presnom tvare:
+{"story":"<2-4 vety naratívu>","choices":["<voľba A>","<voľba B>","<voľba C>"]}
+
+PRAVIDLÁ:
+- Žiaden text okolo JSON, žiadne backticks, žiadne komentáre, žiadne markdown.
+- Píš ${langStr === 'slovensky' ? 'iba po slovensky, diakritiku zachovaj (á, é, í, ó, ú, ä, č, ď, ľ, ň, ô, š, ť, ž). Žiadne české ani anglické slová.' : langStr === 'česky' ? 'iba česky, diakritiku zachovaj. Žiadne slovenské ani anglické slová.' : 'in clear English'}.
+- "story" je 2–4 vety v 2. osobe (tykanie ${langStr === 'slovensky' ? 'pre slovenčinu' : 'tu/your for English'}). Atmosférické, krátke vety.
+- "choices" sú 3 KRÁTKE konkrétne akcie (max 12 slov). NIKDY nie áno/nie.
+- Ak je vstup od hráča prvý ("__start__"), vrať 3 ÚVODY rôznych príbehov — každá choice = "Názov príbehu — krátky hook".
+- Ak hráč vybral názov príbehu, "story" je úvodná scéna toho príbehu, "choices" sú prvé 3 akcie.
+- Príbeh sa rozvíja. Nepíš stále to isté. Nadviaž na predošlú voľbu.
+- Občas pridaj záhadu, nečakaný zvrat, alebo morálnu dilemu — udrž pozornosť.`;
+}
+
+const RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    story: { type: 'string', minLength: 1 },
+    choices: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'string', minLength: 1 } }
+  },
+  required: ['story', 'choices'],
+  additionalProperties: false
+};
+
+const state = {
+  prov: localStorage.getItem(LS.prov) || 'anthropic',
+  antKey: localStorage.getItem(LS.ant) || '',
+  lmUrl: localStorage.getItem(LS.lmUrl) || 'http://localhost:1234/v1/chat/completions',
+  lmModel: localStorage.getItem(LS.lmModel) || 'gemma-4-e4b-it-mlx',
+  lmKey: localStorage.getItem(LS.lmKey) || '',
+  lang: localStorage.getItem(LS.lang) || 'sk',
+  history: [], // {role, content}
+  steps: [], // {step, choice, story}
+  step: 0,
+  phase: 'titles', // titles | story
+  chosenTitle: null,
+  busy: false,
+  current: null,
+};
+
+// ── DOM helpers ──────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const stage = $('stage');
+function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+function mk(tag, opts){
+  const e = document.createElement(tag);
+  if (opts && opts.cls) e.className = opts.cls;
+  if (opts && opts.text != null) e.textContent = opts.text;
+  if (opts && opts.attrs) Object.entries(opts.attrs).forEach(([k,v]) => e.setAttribute(k, v));
+  return e;
+}
+function setBarStep(){
+  $('bar-step').textContent = state.step > 0 ? `· ${state.phase === 'titles' ? 'výber' : ('krok ' + state.step)}` : '';
+}
+
+// ── Loading + error UI ───────────────────────────────────────────────────
+function showLoading(msg){
+  clear(stage);
+  const wrap = mk('div', {cls: 'loading'});
+  wrap.appendChild(mk('span', {cls: 'spinner'}));
+  wrap.appendChild(document.createTextNode(' ' + msg));
+  stage.appendChild(wrap);
+}
+function showError(title, detail, onRetry, onReset){
+  clear(stage);
+  const wrap = mk('div', {cls: 'err'});
+  wrap.appendChild(mk('strong', {text: '⚠ ' + title}));
+  wrap.appendChild(mk('pre', {text: String(detail).slice(0, 800)}));
+  const row = mk('div', {cls: 'row'});
+  const retry = mk('button', {cls: 'btn btn-primary', text: 'Skúsiť znova'});
+  retry.type = 'button';
+  retry.onclick = onRetry;
+  row.appendChild(retry);
+  if (onReset){
+    const r = mk('button', {cls: 'btn btn-danger', text: 'Reset hry'});
+    r.type = 'button'; r.onclick = onReset; row.appendChild(r);
+  }
+  const s = mk('button', {cls: 'btn btn-glass', text: 'Otvor nastavenia'});
+  s.type = 'button'; s.onclick = openSettings; row.appendChild(s);
+  wrap.appendChild(row);
+  stage.appendChild(wrap);
+}
+
+// ── Setup screen (when no API key) ───────────────────────────────────────
+function showSetup(){
+  clear(stage);
+  const w = mk('section', {cls: 'setup'});
+  const h = mk('h2');
+  h.appendChild(document.createTextNode('Volíš ty. '));
+  const br = document.createElement('br'); h.appendChild(br);
+  const sp = mk('span', {text: 'Rozpráva model.'}); h.appendChild(sp);
+  w.appendChild(h);
+  w.appendChild(mk('p', {text: 'Pred štartom si vyber providera a vlož vlastný API key. Kľúč ostane v tvojom prehliadači (localStorage) — nikdy neodíde nikam inam.'}));
+  const row = mk('div', {cls: 'row'});
+  const b1 = mk('button', {cls: 'btn btn-primary', text: '⚙ Nastaviť API key'}); b1.type='button'; b1.onclick = openSettings;
+  row.appendChild(b1);
+  w.appendChild(row);
+  w.appendChild(mk('p', {text: 'Nemáš Anthropic key? Spusti si LM Studio lokálne s Gemma4 — funguje bez kreditov.'}));
+  stage.appendChild(w);
+}
+
+// ── Settings modal ───────────────────────────────────────────────────────
+function openSettings(){
+  $('prov').value = state.prov;
+  $('ant-key').value = state.antKey;
+  $('lm-url').value = state.lmUrl;
+  $('lm-model').value = state.lmModel;
+  $('lm-key').value = state.lmKey;
+  $('lang').value = state.lang;
+  toggleProviderFields();
+  $('settings-modal').classList.add('show');
+}
+function closeSettings(){ $('settings-modal').classList.remove('show'); }
+function toggleProviderFields(){
+  const p = $('prov').value;
+  $('anthropic-fields').style.display = p === 'anthropic' ? 'flex' : 'none';
+  $('lmstudio-fields').style.display = p === 'lmstudio' ? 'flex' : 'none';
+}
+$('prov').addEventListener('change', toggleProviderFields);
+$('close-settings').addEventListener('click', closeSettings);
+$('btn-settings').addEventListener('click', openSettings);
+$('save-settings').addEventListener('click', () => {
+  const newProv = $('prov').value;
+  const newAntKey = $('ant-key').value.trim();
+  const newLmUrl = $('lm-url').value.trim();
+  const newLmModel = $('lm-model').value.trim();
+  const newLmKey = $('lm-key').value.trim();
+  // Validation per provider
+  if (newProv === 'anthropic' && !newAntKey){
+    alert('Anthropic API key je povinný. Získaj ho na console.anthropic.com/settings/keys.');
+    $('ant-key').focus();
+    return;
+  }
+  if (newProv === 'lmstudio'){
+    if (!newLmUrl){ alert('LM Studio endpoint je povinný.'); $('lm-url').focus(); return; }
+    if (!newLmModel){ alert('LM Studio model je povinný.'); $('lm-model').focus(); return; }
+    if (!newLmKey){
+      alert('LM Studio od v0.3.10 vyžaduje Bearer token. Otvor LM Studio → Developer → API Key a vlož ho sem.');
+      $('lm-key').focus();
+      return;
+    }
+  }
+  state.prov = newProv;
+  state.antKey = newAntKey;
+  state.lmUrl = newLmUrl;
+  state.lmModel = newLmModel;
+  state.lmKey = newLmKey;
+  state.lang = $('lang').value;
+  localStorage.setItem(LS.prov, state.prov);
+  localStorage.setItem(LS.ant, state.antKey);
+  localStorage.setItem(LS.lmUrl, state.lmUrl);
+  localStorage.setItem(LS.lmModel, state.lmModel);
+  localStorage.setItem(LS.lmKey, state.lmKey);
+  localStorage.setItem(LS.lang, state.lang);
+  closeSettings();
+  if (hasUsableConfig()){
+    if (state.history.length === 0) startNew();
+    else renderCurrent();
+  } else {
+    showSetup();
+  }
+});
+
+function hasUsableConfig(){
+  if (state.prov === 'anthropic') return !!state.antKey;
+  if (state.prov === 'lmstudio') return !!state.lmUrl && !!state.lmModel;
+  return false;
+}
+
+// ── JSON parsing ─────────────────────────────────────────────────────────
+function parseJsonLoose(text){
+  let t = String(text || '').trim();
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  const s = t.indexOf('{'); const e = t.lastIndexOf('}');
+  if (s >= 0 && e > s) t = t.slice(s, e + 1);
+  return JSON.parse(t);
+}
+function validate(obj){
+  if (!obj || typeof obj !== 'object') throw new Error('not object');
+  if (typeof obj.story !== 'string' || !obj.story.trim()) throw new Error('missing story');
+  if (!Array.isArray(obj.choices) || obj.choices.length !== 3) throw new Error('need exactly 3 choices');
+  obj.choices.forEach((c, i) => { if (typeof c !== 'string' || !c.trim()) throw new Error('choice ' + i + ' empty'); });
+  return obj;
+}
+
+// ── Provider calls ───────────────────────────────────────────────────────
+async function callAnthropic(messages){
+  const body = {
+    model: 'claude-sonnet-4-5',
+    max_tokens: 600,
+    system: messages.find(m => m.role === 'system')?.content || '',
+    messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })),
+    temperature: 0.85,
+  };
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': state.antKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok){
+    const txt = await res.text();
+    throw new Error('Anthropic HTTP ' + res.status + ': ' + txt.slice(0, 300));
+  }
+  const data = await res.json();
+  const text = data?.content?.[0]?.text || '';
+  return validate(parseJsonLoose(text));
+}
+
+async function callLMStudio(messages){
+  const body = {
+    model: state.lmModel,
+    messages,
+    temperature: 0.85,
+    max_tokens: 500,
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'story_turn', schema: RESPONSE_SCHEMA, strict: true }
+    },
+  };
+  const headers = { 'Content-Type': 'application/json' };
+  if (state.lmKey) headers['Authorization'] = 'Bearer ' + state.lmKey;
+  const res = await fetch(state.lmUrl, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!res.ok){
+    const txt = await res.text();
+    throw new Error('LM Studio HTTP ' + res.status + ': ' + txt.slice(0, 300));
+  }
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || '';
+  return validate(parseJsonLoose(text));
+}
+
+async function callProvider(messages){
+  if (state.prov === 'anthropic') return await callAnthropic(messages);
+  return await callLMStudio(messages);
+}
+
+// ── Game flow ────────────────────────────────────────────────────────────
+async function turn(userInput){
+  if (state.busy) return;
+  state.busy = true;
+  showLoading(state.step === 0 ? 'Pripravujem 3 príbehy…' : 'Pokračujem v príbehu…');
+  setBarStep();
+
+  if (state.history.length === 0){
+    state.history.push({ role: 'system', content: systemPrompt(state.lang) });
+    state.history.push({ role: 'user', content: '__start__' });
+  } else if (userInput){
+    state.history.push({ role: 'user', content: userInput });
+  }
+
+  try {
+    const resp = await callProvider(state.history);
+    state.history.push({ role: 'assistant', content: JSON.stringify(resp) });
+    state.current = resp;
+    state.busy = false;
+    renderCurrent();
+  } catch (e){
+    state.busy = false;
+    // pop the last user message so retry doesn't double-push
+    if (state.history[state.history.length - 1]?.role === 'user'){
+      state.history.pop();
+    }
+    const msg = e.message || String(e);
+    // Detect common auth errors → friendlier hint + auto-open settings
+    const is401 = /HTTP 401|API token is required|invalid_api_key|invalid x-api-key|authentication_error/i.test(msg);
+    const is429 = /HTTP 429|rate_limit/i.test(msg);
+    const isBilling = /credit balance|too low/i.test(msg);
+    let title = 'Provider zlyhal: ' + (state.prov === 'anthropic' ? 'Anthropic' : 'LM Studio');
+    let hint = msg;
+    if (state.prov === 'lmstudio' && is401){
+      title = 'LM Studio chce Bearer token';
+      hint = 'LM Studio od v0.3.10 vyžaduje API token. V LM Studio app → Developer → API Key skopíruj token a vlož ho do Nastavenia → "Bearer token".\n\n' + msg;
+    } else if (state.prov === 'anthropic' && isBilling){
+      title = 'Anthropic — nedostatok kreditov';
+      hint = 'Tvoj API key má prázdny credit balance. Doplň na console.anthropic.com/settings/billing, alebo skús LM Studio local provider.\n\n' + msg;
+    } else if (state.prov === 'anthropic' && is401){
+      title = 'Anthropic — neplatný kľúč';
+      hint = 'API key sa odmietol. Skontroluj že začína "sk-ant-api03-..." a že nemá prebytočné medzery. Vygeneruj nový na console.anthropic.com/settings/keys.\n\n' + msg;
+    } else if (is429){
+      title = 'Rate limit';
+      hint = 'Príliš veľa requestov v krátkom čase. Počkaj 30-60 sekúnd a skús znova.\n\n' + msg;
+    }
+    showError(title, hint, () => turn(userInput), reset);
+    // For auth errors specifically — auto-open settings so user can fix immediately
+    if (is401 || isBilling) setTimeout(openSettings, 600);
+  }
+}
+
+function renderCurrent(){
+  const r = state.current;
+  if (!r){ showSetup(); return; }
+  clear(stage);
+  const t = mk('article', {cls: 'turn'});
+  const m = mk('div', {cls: 'turn-meta'});
+  if (state.chosenTitle){
+    const b = mk('span', {cls: 'badge', text: state.chosenTitle.slice(0, 50)});
+    m.appendChild(b);
+  }
+  m.appendChild(document.createTextNode(state.phase === 'titles' ? 'Vyber svoj príbeh' : ('Krok ' + state.step)));
+  t.appendChild(m);
+
+  const s = mk('div', {cls: 'story'});
+  // Split into paragraphs if multiple sentences
+  String(r.story).split(/\n+/).forEach(p => { if (p.trim()) s.appendChild(mk('p', {text: p.trim()})); });
+  t.appendChild(s);
+
+  const c = mk('div', {cls: 'choices'});
+  r.choices.forEach((choice, i) => {
+    const btn = mk('button', {cls: 'choice'});
+    btn.type = 'button';
+    const letter = mk('span', {cls: 'letter', text: 'ABC'[i]});
+    btn.appendChild(letter);
+    btn.appendChild(document.createTextNode(choice));
+    btn.onclick = () => pick(i, choice);
+    c.appendChild(btn);
+  });
+  t.appendChild(c);
+  stage.appendChild(t);
+
+  // History rail
+  if (state.steps.length > 0){
+    const h = mk('div', {cls: 'history'});
+    h.appendChild(mk('div', {cls: 'history-h', text: '◆ TVOJE ROZHODNUTIA'}));
+    state.steps.forEach((s, i) => {
+      const item = mk('div', {cls: 'history-step'});
+      item.appendChild(mk('span', {cls: 'n', text: String(i + 1).padStart(2, '0')}));
+      item.appendChild(document.createTextNode(s.choice));
+      h.appendChild(item);
+    });
+    stage.appendChild(h);
+  }
+  setBarStep();
+}
+
+function pick(i, choice){
+  state.step++;
+  state.steps.push({ step: state.step, choice, story: state.current?.story || '' });
+  if (state.phase === 'titles'){
+    state.chosenTitle = choice.split('—')[0].trim();
+    state.phase = 'story';
+    turn(`Vybral som príbeh: "${choice}". Začni úvodnú scénu — 2-3 vety v 2. osobe, 3 konkrétne akcie ako voľby.`);
+  } else {
+    turn(`V príbehu "${state.chosenTitle}" som vybral akciu: "${choice}". Pokračuj — story 2-3 vety, 3 nové akcie.`);
+  }
+}
+
+function startNew(){
+  state.history = [];
+  state.steps = [];
+  state.step = 0;
+  state.phase = 'titles';
+  state.chosenTitle = null;
+  state.current = null;
+  turn(null);
+}
+
+function reset(){
+  state.history = [];
+  state.steps = [];
+  state.step = 0;
+  state.phase = 'titles';
+  state.chosenTitle = null;
+  state.current = null;
+  state.busy = false;
+  setBarStep();
+  if (hasUsableConfig()) startNew();
+  else showSetup();
+}
+
+function showHistory(){
+  if (state.steps.length === 0){
+    alert('Zatiaľ žiadna história — vyber prvú voľbu.');
+    return;
+  }
+  const lines = state.steps.map((s, i) => `${String(i+1).padStart(2,'0')}. ${s.choice}\n   ${(s.story || '').slice(0, 120)}…`).join('\n\n');
+  alert('TVOJ PRÍBEH ZATIAĽ:\n\n' + lines);
+}
+
+$('btn-reset').addEventListener('click', () => { if (confirm('Začať odznova?')) reset(); });
+$('btn-history').addEventListener('click', showHistory);
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'r'){ e.preventDefault(); if (confirm('Reset?')) reset(); }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────
+if (hasUsableConfig()){
+  startNew();
+} else {
+  showSetup();
+}
+</script>
+</body>
+</html>
